@@ -617,6 +617,7 @@ void AtlasEngine::_resolveFontMetrics(const wchar_t* requestedFaceName, const Fo
     const auto strikethroughPosition = static_cast<float>(-metrics.strikethroughPosition) * designUnitsPerPx;
     const auto strikethroughThickness = static_cast<float>(metrics.strikethroughThickness) * designUnitsPerPx;
 
+    const auto cellWidth = std::ceilf(advanceWidth);
     const auto halfGap = lineGap / 2.0f;
     const auto baseline = std::ceilf(ascent + halfGap);
     const auto lineHeight = std::ceilf(baseline + descent + halfGap);
@@ -648,21 +649,20 @@ void AtlasEngine::_resolveFontMetrics(const wchar_t* requestedFaceName, const Fo
     // Our cells can't overlap each other so we additionally clamp the bottom line to be inside the cell boundaries.
     doubleUnderlinePosBottom = std::min(doubleUnderlinePosBottom, lineHeight - thinLineWidth);
 
-    const auto cellWidth = gsl::narrow<u16>(std::ceilf(advanceWidth));
-    const auto cellHeight = gsl::narrow<u16>(lineHeight);
+    const u16x2 cellSize{ gsl::narrow<u16>(cellWidth), gsl::narrow<u16>(lineHeight) };
 
     {
         til::size coordSize;
-        coordSize.X = cellWidth;
-        coordSize.Y = cellHeight;
+        coordSize.X = cellSize.x;
+        coordSize.Y = cellSize.y;
 
         if (requestedSize.X == 0)
         {
             // The coordSizeUnscaled parameter to SetFromEngine is used for API functions like GetConsoleFontSize.
             // Since clients expect that settings the font height to Y yields back a font height of Y,
-            // we're scaling the X relative/proportional to the actual cellWidth/cellHeight ratio.
+            // we're scaling the X relative/proportional to the actual cellSize.x/.y ratio.
             // The code below uses a poor form of integer rounding.
-            requestedSize.X = (requestedSize.Y * cellWidth + cellHeight / 2) / cellHeight;
+            requestedSize.X = (requestedSize.Y * cellSize.x + cellSize.y / 2) / cellSize.y;
         }
 
         fontInfo.SetFromEngine(requestedFaceName, requestedFamily, requestedWeight, false, coordSize, requestedSize);
@@ -687,7 +687,8 @@ void AtlasEngine::_resolveFontMetrics(const wchar_t* requestedFaceName, const Fo
         fontMetrics->fontName = std::move(fontName);
         fontMetrics->fontSizeInDIP = fontSize / static_cast<float>(_api.dpi) * 96.0f;
         fontMetrics->baselineInDIP = baseline / static_cast<float>(_api.dpi) * 96.0f;
-        fontMetrics->cellSize = { cellWidth, cellHeight };
+        fontMetrics->advanceScale = cellWidth / advanceWidth;
+        fontMetrics->cellSize = cellSize;
         fontMetrics->fontWeight = fontWeightU16;
         fontMetrics->underlinePos = underlinePosU16;
         fontMetrics->underlineWidth = underlineWidthU16;
